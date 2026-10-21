@@ -1,0 +1,36 @@
+# The Luxeia add-on (secure_updates_plan.md, stage 4): serves the Luxeia
+# dashboard only to people signed in to this home (HA's ingress), and keeps
+# it up to date from Luxeia's update server. Installed locally: copy the
+# folder scripts/package-addon.sh makes to /addons/luxeia/ (addon/DOCS.md).
+name: Luxeia Home
+version: "1.1.0"
+slug: luxeia
+description: Your Luxeia dashboard, kept up to date and only for people signed in to this home.
+url: https://luxeia.co.uk
+arch:
+  - aarch64
+  - amd64
+  - armv7
+  - armhf
+  - i386
+init: false
+startup: application
+boot: auto
+# "Check for updates" in the app asks through this (hassio.addon_stdin)
+stdin: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:home-variant
+panel_title: Luxeia Home
+# Everyone signed in to the home can open it, not only administrators
+panel_admin: false
+# /homeassistant: to keep just the guest page public in www/luxeia-dashboard
+map:
+  - homeassistant_config:rw
+options:
+  home_key: ""
+  public_guest_page_only: false
+schema:
+  home_key: password
+  public_guest_page_only: bool
+  server: url?

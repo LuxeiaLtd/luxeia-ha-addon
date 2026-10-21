@@ -1,0 +1,14 @@
+configuration:
+  home_key:
+    name: Home key
+    description: This home's key from Luxeia's update admin page (starts lxh_).
+  public_guest_page_only:
+    name: Keep only the guest page public
+    description: >-
+      Replaces the old public copy of the dashboard in www/luxeia-dashboard
+      with just the guest page and a small page that opens Luxeia Home, so
+      guest links and the app's usual start screen keep working, and
+      nothing else can be downloaded without signing in. Keep it on.
+  server:
+    name: Update server
+    description: Leave empty for updates.luxeia.co.uk.
