@@ -3,13 +3,12 @@
   The opener (secure_updates_plan.md, stage 4). The Luxeia add-on puts this
   at the home's usual public address, /local/luxeia-dashboard/index.html,
   which the home's Webpage dashboard (the app's default screen) already
-  shows. It holds none of the dashboard: it asks Home Assistant, as the
-  person already signed in to the HA app, for a session for the add-on
-  (ingress), and opens the add-on's own page in its place. So the app opens
-  on Luxeia Home by itself, at home or away, and the dashboard stays behind
-  HA's sign-in. js/ingress.js keeps the session alive afterwards.
-  Home Assistant allows this for everyone signed in, not only admins, for
-  an add-on whose panel is open to all (`panel_admin: false`).
+  shows. It holds none of the dashboard. Phones keep their own copy of this
+  page, so it does nothing itself: it fetches opener.js fresh on every open
+  (a new ?t= each time), which asks Home Assistant for a session for the
+  add-on and opens its page in this one's place. js/ingress.js keeps the
+  session alive afterwards. Keep this page as it is: a change to it can
+  take weeks to reach every phone, while opener.js reaches them at once.
 -->
 <html lang="en-GB">
 <head>
@@ -32,51 +31,13 @@
 </main>
 <script>
   (function () {
-    var ADDON = 'local_luxeia';
-    var msg = document.getElementById('msg');
-    var tries = 0;
-    function say(text) { msg.textContent = text; }
-
-    // Home Assistant's own connection, from the HA app (or browser) around this page
-    function hass() {
-      try {
-        var el = window.parent !== window && window.parent.document.querySelector('home-assistant');
-        return el && el.hass && el.hass.connection ? el.hass : null;
-      } catch (e) {
-        return null;
-      }
-    }
-    function supervisor(h, endpoint, method) {
-      return h.callWS({ type: 'supervisor/api', endpoint: endpoint, method: method });
-    }
-
-    function open() {
-      tries += 1;
-      var h = hass();
-      if (!h) {
-        // Home Assistant may still be starting up around us
-        if (tries < 40) return setTimeout(open, 250);
-        say('Open Luxeia Home from the Home Assistant app.');
-        return;
-      }
-      supervisor(h, '/addons/' + ADDON + '/info', 'get').then(function (info) {
-        if (!info || !info.ingress_url) throw new Error('no ingress address');
-        if (info.state !== 'started') {
-          say('Luxeia Home is starting. One moment…');
-          return setTimeout(open, 3000);
-        }
-        return supervisor(h, '/ingress/session', 'post').then(function (s) {
-          // As Home Assistant's own add-on panels set it
-          document.cookie = 'ingress_session=' + s.session + ';path=/api/hassio_ingress/;SameSite=Strict'
-            + (location.protocol === 'https:' ? ';Secure' : '');
-          location.replace(info.ingress_url + location.hash);
-        });
-      }).catch(function () {
-        say('Can’t reach Luxeia Home just now. Trying again…');
-        setTimeout(open, 5000);
-      });
-    }
-    open();
+    var s = document.createElement('script');
+    s.src = '/local/luxeia-dashboard/opener.js?t=' + Date.now();
+    s.onerror = function () {
+      document.getElementById('msg').textContent = 'Can’t reach Luxeia Home just now. Trying again…';
+      setTimeout(function () { location.reload(); }, 5000);
+    };
+    document.body.appendChild(s);
   })();
 </script>
 </body>

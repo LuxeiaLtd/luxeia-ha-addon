@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- The page the app opens on now fetches its instructions fresh every
+  time, so a phone's saved copy can never keep looking for Luxeia Home in
+  the wrong place (it tries every place Luxeia Home can be installed from).
+
 ## 1.1.0
 
 - Installs from Luxeia's add-on store, so new versions appear here as an

@@ -51,7 +51,10 @@ the store): add the store and install Luxeia Home from it as above, with
 the same home key and **Keep only the guest page public** on. Then stop
 and **Uninstall** the old one (it shows under Local apps), start the new
 one, and delete `local_apps/luxeia`. Its opener finds the new one by
-itself. The "Luxeia dashboard update check" automation isn't needed any
+itself (from add-on 1.1.1; a phone or browser that still says "Can't
+reach Luxeia Home" after a move from 1.1.0 or earlier has kept the old
+opener: clear it once, with the HA app's Settings › Companion app ›
+Debugging › Reset frontend cache, or the browser's site data). The "Luxeia dashboard update check" automation isn't needed any
 more (the app asks the add-on directly): delete it.
 
 The add-on's log warns if the home still has the old nightly update from

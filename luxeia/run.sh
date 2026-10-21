@@ -141,11 +141,13 @@ sync_guest_page() {
     return 1
   fi
   # Where the app's default screen points: the opener takes people on to the
-  # add-on, which it finds by this add-on's own id (it depends on where the
-  # add-on was installed from, and people who can't change settings can
-  # only ask about an add-on whose id they know)
-  sed "s/var ADDON = 'local_luxeia';/var ADDON = '${SLUG}';/" "$APP/opener.html" > "$new/index.html" \
-    && grep -q "var ADDON = '${SLUG}';" "$new/index.html" \
+  # add-on, which it finds by this add-on's own id first (it depends on where
+  # the add-on was installed from, and people who can't change settings can
+  # only ask about an add-on whose id they know). Phones keep index.html, so
+  # it only fetches opener.js, fresh each time, which holds the id.
+  cp "$APP/opener.html" "$new/index.html" \
+    && sed "s/var ADDON = 'local_luxeia';/var ADDON = '${SLUG}';/" "$APP/opener.js" > "$new/opener.js" \
+    && grep -q "var ADDON = '${SLUG}';" "$new/opener.js" \
     || { log "Couldn't copy the opener"; rm -rf "$new"; return 1; }
   # Swapped in one step, so guest links never see a half-copied folder
   [ -d "$PUBLIC" ] && mv "$PUBLIC" "$old"

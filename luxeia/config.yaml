@@ -3,7 +3,7 @@
 # it up to date from Luxeia's update server. Installed locally: copy the
 # folder scripts/package-addon.sh makes to /addons/luxeia/ (addon/DOCS.md).
 name: Luxeia Home
-version: "1.1.0"
+version: "1.1.1"
 slug: luxeia
 description: Your Luxeia dashboard, kept up to date and only for people signed in to this home.
 url: https://luxeia.co.uk
