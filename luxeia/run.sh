@@ -151,16 +151,20 @@ else:
 # (for the app's Settings › Home system › Luxeia set-up)
 status() { # running(true|false) result message
   local dir="$LIVE"
-  [ -d "$dir" ] || dir="$WAITING"
-  mkdir -p "$dir"
+  # Never makes the build folder itself: one swapped in at that moment would
+  # land inside an empty one it had just made
+  [ -d "$dir" ] || { dir="$WAITING"; mkdir -p "$dir"; }
   python3 -I -c '
 import datetime, json, os, sys
 d, running, result, message, addon, slug, key, guest, channel = sys.argv[1:]
 out = {"running": running == "true", "finished": datetime.datetime.now(datetime.timezone.utc).isoformat(), "result": result, "message": message[:300],
        "addon": addon, "slug": slug, "key": key, "guestOnly": guest == "true", "channel": channel}
 tmp = os.path.join(d, ".update-status.json")
-json.dump(out, open(tmp, "w"))
-os.replace(tmp, os.path.join(d, "update-status.json"))
+try:
+    json.dump(out, open(tmp, "w"))
+    os.replace(tmp, os.path.join(d, "update-status.json"))
+except OSError:
+    pass  # the build folder was being swapped: the next status lands in the new one
 ' "$dir" "$1" "$2" "${3:-}" "$ADDON_VERSION" "$SLUG" "${KEY_FROM:-none}" "$GUEST_ONLY" "$(cat "$STATE/channel" 2>/dev/null)"
 }
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+
+- Writing how its last check went can no longer get in the way of a new
+  dashboard being swapped in at the same moment.
+
 ## 1.3.0
 
 - A new home can be set up with a short set-up code from Luxeia's admin
