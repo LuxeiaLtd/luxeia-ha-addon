@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0
+
+- A new home can be set up with a short set-up code from Luxeia's admin
+  page (like ABCDE-23456) instead of copying a long key: type it into
+  "Home key or set-up code" and the add-on swaps it for the home's key.
+- Tells the Luxeia app how it's set up, for its set-up check in Settings ›
+  Home system.
+
 ## 1.2.0
 
 - Test homes check for an approved build every 15 minutes, so a build

@@ -20,7 +20,9 @@
 #     dashboard, the app's default screen, still opens Luxeia Home by itself.
 #
 # The home key comes from the add-on's options: never on a command line,
-# never in HA's log.
+# never in HA's log. That box takes the key itself (lxh_...) or, for a new
+# home, the short set-up code from the admin page, which is swapped for the
+# key once (the server's /v1/enrol) and kept in $STATE/home-key.
 #
 # For tests, LUXEIA_ONCE=1 runs one check and stops (no web server or
 # timer), LUXEIA_ONCE=stdin handles stdin's lines and stops at its end, and
@@ -72,30 +74,94 @@ print("" if v is None else (str(v).lower() if isinstance(v, bool) else v))
 
 mkdir -p "$STATE" "$WWW"
 chmod 700 "$STATE"
-HOME_KEY="$(option home_key)"
+KEY_OPTION="$(option home_key | tr -d '[:space:]')"
 SERVER="$(option server)"
 GUEST_ONLY="$(option public_guest_page_only)"
+HOME_KEY=""
+KEY_FROM=""     # key | code | none, for the app's set-up check
+KEY_PROBLEM=""  # why a set-up code didn't work
 
 # The updater reads its key from update.conf, never its command line
-(umask 077; {
-  echo "HOME_KEY=${HOME_KEY}"
-  [ -n "$SERVER" ] && echo "SERVER=${SERVER}"
-} > "$STATE/update.conf")
+write_conf() {
+  (umask 077; {
+    echo "HOME_KEY=${HOME_KEY}"
+    [ -n "$SERVER" ] && echo "SERVER=${SERVER}"
+  } > "$STATE/update.conf")
+}
+
+# The home key, from the add-on's options: the key itself, or a set-up code
+# swapped for it once. A code already swapped is remembered (by its hash),
+# so restarting doesn't spend it again; a different code is swapped anew.
+find_key() {
+  KEY_PROBLEM=""
+  case "$KEY_OPTION" in
+    "") HOME_KEY=""; KEY_FROM=none; write_conf; return 0 ;;
+    lxh_*) HOME_KEY="$KEY_OPTION"; KEY_FROM=key; write_conf; return 0 ;;
+  esac
+  KEY_FROM=code
+  local code hash answer
+  code="$(printf '%s' "$KEY_OPTION" | tr 'a-z' 'A-Z' | tr -cd 'A-Z0-9')"
+  hash="$(printf '%s' "$code" | sha256sum | cut -d' ' -f1)"
+  if [ -s "$STATE/home-key" ] && [ "$(cat "$STATE/home-key-code" 2>/dev/null)" = "$hash" ]; then
+    HOME_KEY="$(cat "$STATE/home-key")"
+    write_conf
+    return 0
+  fi
+  HOME_KEY=""
+  write_conf
+  log "Using the set-up code to get this home's key"
+  # The code goes to curl on its standard input, never as an argument
+  rm -f "$STATE/enrol.json"
+  if ! printf '{"code": "%s"}' "$code" | curl -sS -m 30 -X POST -H 'Content-Type: application/json' \
+      --data-binary @- -o "$STATE/enrol.json" "${SERVER:-https://updates.luxeia.co.uk}/v1/enrol" 2>/dev/null; then
+    KEY_PROBLEM="Couldn't reach Luxeia's update server to use the set-up code. It'll try again at the next check."
+    log "$KEY_PROBLEM"
+    return 1
+  fi
+  answer="$(python3 -I -c '
+import json, re, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    d = {}
+key = d.get("key") or ""
+if re.fullmatch(r"lxh_[A-Za-z0-9_-]{20,200}", key):
+    print("key " + key)
+else:
+    print("error " + str(d.get("error") or "the update server did not give a key")[:200])
+' "$STATE/enrol.json")"
+  rm -f "$STATE/enrol.json"
+  case "$answer" in
+    "key "*)
+      (umask 077; printf '%s\n' "${answer#key }" > "$STATE/home-key"; printf '%s\n' "$hash" > "$STATE/home-key-code")
+      HOME_KEY="${answer#key }"
+      write_conf
+      log "This home is set up with Luxeia's update server (the set-up code is used up now)"
+      return 0 ;;
+    *)
+      KEY_PROBLEM="The set-up code didn't work: ${answer#error }"
+      log "$KEY_PROBLEM"
+      return 1 ;;
+  esac
+}
 
 # --- What the app reads -------------------------------------------------------
 
+# update-status.json: how the last check went, and how this home is set up
+# (for the app's Settings › Home system › Luxeia set-up)
 status() { # running(true|false) result message
   local dir="$LIVE"
   [ -d "$dir" ] || dir="$WAITING"
   mkdir -p "$dir"
   python3 -I -c '
 import datetime, json, os, sys
-d, running, result, message = sys.argv[1:]
-out = {"running": running == "true", "finished": datetime.datetime.now(datetime.timezone.utc).isoformat(), "result": result, "message": message[:300]}
+d, running, result, message, addon, slug, key, guest, channel = sys.argv[1:]
+out = {"running": running == "true", "finished": datetime.datetime.now(datetime.timezone.utc).isoformat(), "result": result, "message": message[:300],
+       "addon": addon, "slug": slug, "key": key, "guestOnly": guest == "true", "channel": channel}
 tmp = os.path.join(d, ".update-status.json")
 json.dump(out, open(tmp, "w"))
 os.replace(tmp, os.path.join(d, "update-status.json"))
-' "$dir" "$1" "$2" "${3:-}"
+' "$dir" "$1" "$2" "${3:-}" "$ADDON_VERSION" "$SLUG" "${KEY_FROM:-none}" "$GUEST_ONLY" "$(cat "$STATE/channel" 2>/dev/null)"
 }
 
 waiting_page() { # message
@@ -169,9 +235,17 @@ sync_guest_page() {
 check() {
   (
     flock -n 9 || { log "Already checking"; exit 0; }
+    # The key (a set-up code is swapped for it the first time; one that
+    # couldn't be used yet, with no internet, is tried again at each check)
+    find_key
+    if [ -n "$KEY_PROBLEM" ]; then
+      [ -f "$LIVE/index.html" ] || waiting_page "Luxeia Home is almost ready. ${KEY_PROBLEM}"
+      status false failed "$KEY_PROBLEM"
+      exit 1
+    fi
     if [ -z "$HOME_KEY" ]; then
-      log "No home key yet: add it in the add-on's Configuration"
-      [ -f "$LIVE/index.html" ] || waiting_page "Luxeia Home is almost ready. Add this home's key in the add-on's Configuration, then restart it."
+      log "No home key yet: add its key or set-up code in the add-on's Configuration"
+      [ -f "$LIVE/index.html" ] || waiting_page "Luxeia Home is almost ready. Add this home's key or set-up code in the add-on's Configuration, then restart it."
       status false failed "No home key yet"
       exit 1
     fi

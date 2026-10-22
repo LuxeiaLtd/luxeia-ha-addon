@@ -1,7 +1,10 @@
 configuration:
   home_key:
-    name: Home key
-    description: This home's key from Luxeia's update admin page (starts lxh_).
+    name: Home key or set-up code
+    description: >-
+      The set-up code for this home from Luxeia's update admin page (like
+      ABCDE-23456), or its full key (starts lxh_). A set-up code works once:
+      the add-on swaps it for the home's key and remembers it.
   public_guest_page_only:
     name: Keep only the guest page public
     description: >-

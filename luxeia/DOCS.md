@@ -28,9 +28,13 @@ Home Assistant now calls add-ons **apps** (Settings › Apps, the App Store,
    it and press **Install**: the home builds it, which takes a few
    minutes. Leave **Auto update** off: Luxeia updates it when it chooses
    (RELEASING.md › The Luxeia add-on).
-3. **Give it the home's key:** the add-on's **Configuration** tab ›
-   **Home key**, from Luxeia's update admin page (Homes › Add a home), and
-   switch on **Keep only the guest page public**. Save.
+3. **Give it the home's set-up code:** the add-on's **Configuration** tab ›
+   **Home key or set-up code**: the short code from Luxeia's update admin
+   page (Homes › Add a home, or Set-up code beside the home), like
+   `ABCDE-23456` (capitals, spaces and the dash don't matter). Switch on
+   **Keep only the guest page public**. Save. When it starts, the add-on
+   swaps the code for the home's own key and keeps it (a full `lxh_` key
+   works in the same box too).
 4. **Start it**, and switch on **Watchdog** and **Show in sidebar** on its
    Info tab (the app also switches the watchdog on the first time an
    administrator opens it). You can hide the sidebar's Luxeia Home entry
@@ -40,8 +44,10 @@ Home Assistant now calls add-ons **apps** (Settings › Apps, the App Store,
    guest page public** on, that address holds the opener, which goes
    straight on to the add-on. (Home Assistant can't make an add-on's own
    panel the screen the app opens on, so never remove this dashboard.)
-6. **Check it,** on a phone, at home and on mobile data: the HA app opens
-   straight into Luxeia Home, as someone who isn't an administrator too.
+6. **Check it:** in Luxeia Home, as an administrator, Settings › Home
+   system › **Luxeia set-up** should tick everything; anything not ticked
+   says what to do. Then on a phone, at home and on mobile data: the HA app
+   opens straight into Luxeia Home, as someone who isn't an administrator too.
    The admin page shows the home's check-in. Then check that a guest link
    works, and that `/local/luxeia-dashboard/js/app.js` on the home's
    address says 404 (the dashboard itself isn't public).
