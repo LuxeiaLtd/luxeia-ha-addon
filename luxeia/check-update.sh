@@ -15,7 +15,10 @@
 # logs and the process list. Arguments are ignored (older callers passed a
 # channel; the server decides now).
 #
-# The add-on sets LUXEIA_DIR, WWW_DIR and VERSION_FILE to its own folders.
+# The add-on sets LUXEIA_DIR, WWW_DIR and VERSION_FILE to its own folders,
+# and LUXEIA_ADDON_VERSION (reported in the check-in). The server's channel
+# for this home ("beta" for test homes) is kept in $LUXEIA_DIR/channel, so
+# the add-on can check test homes more often.
 #
 # HA OS uses BusyBox: plain options only.
 set -euo pipefail
@@ -77,7 +80,7 @@ server() { # path [curl options...]
 checkin() { # problem (empty when all is well)
   local version=""
   [ -f "$WWW_DIR/build.json" ] && version="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$WWW_DIR/build.json" | head -n1)"
-  python3 -I -c 'import json, sys; print(json.dumps({"version": sys.argv[1], "error": sys.argv[2][:300]}))' "$version" "$1" > "$WORK/checkin.json"
+  python3 -I -c 'import json, sys; print(json.dumps({"version": sys.argv[1], "error": sys.argv[2][:300], "addon": sys.argv[3]}))' "$version" "$1" "${LUXEIA_ADDON_VERSION:-}" > "$WORK/checkin.json"
   server /v1/checkin -X POST -H 'Content-Type: application/json' --data-binary "@$WORK/checkin.json" -o /dev/null 2>/dev/null || true
 }
 fail() { echo "$*" >&2; checkin "$*"; exit 1; }
@@ -91,8 +94,11 @@ server /v1/update -o "$WORK/update.json" 2>"$WORK/curl.err" \
 
 # The answer, written out byte for byte so the signatures can be checked
 offer="$(python3 -I -c '
-import json, sys
+import json, re, sys
 d = json.load(open(sys.argv[1]))
+channel = d.get("channel")
+if isinstance(channel, str) and re.fullmatch(r"[a-z]{1,20}", channel):
+  open(sys.argv[3], "w").write(channel + "\n")
 if d.get("paused"):
   print("paused")
 elif d.get("none"):
@@ -102,7 +108,7 @@ else:
                      ("build-manifest.json", d["build"]["manifest"]), ("build-manifest.sig", d["build"]["sig"])):
       open(sys.argv[2] + "/" + name, "wb").write(text.encode("utf-8"))
   print("offer " + d["download"])
-' "$WORK/update.json" "$WORK")" || fail "The update server's answer wasn't readable"
+' "$WORK/update.json" "$WORK" "$LUXEIA_DIR/channel")" || fail "The update server's answer wasn't readable"
 case "$offer" in
   paused) echo "Updates are paused; keeping this build"; done_ok ;;
   none) echo "Nothing approved for this home yet"; done_ok ;;

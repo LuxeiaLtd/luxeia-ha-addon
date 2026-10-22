@@ -4,7 +4,9 @@
 # date from Luxeia's update server with the same updater homes use today
 # (check-update.sh, both signatures, seq). See DOCS.md.
 #
-#   - on start, then once a night at a random time between 2am and 5am, and
+#   - on start, then once a night at a random time between 2am and 5am
+#     (every 15 minutes on test homes, so a build approved for them arrives
+#     within minutes), and
 #     whenever "check" arrives on stdin ("Check for updates" in the app,
 #     through hassio.addon_stdin), it runs the updater;
 #   - serve.py serves the build to HA's ingress proxy only, telling phones
@@ -21,7 +23,8 @@
 # never in HA's log.
 #
 # For tests, LUXEIA_ONCE=1 runs one check and stops (no web server or
-# timer), and LUXEIA_ONCE=stdin handles stdin's lines and stops at its end.
+# timer), LUXEIA_ONCE=stdin handles stdin's lines and stops at its end, and
+# LUXEIA_ONCE=next prints the seconds until the next check.
 # LUXEIA_APP_DIR, LUXEIA_DATA_DIR, HA_CONFIG_DIR, LUXEIA_SERVER_CMD,
 # LUXEIA_PORT and LUXEIA_ALLOW_IP replace the add-on's own paths and
 # settings.
@@ -51,6 +54,10 @@ SLUG="${LUXEIA_SLUG:-$(hostname 2>/dev/null | tr '-' '_')}"
 case "$SLUG" in
   *[!a-z0-9_]*|"") SLUG=local_luxeia ;;
 esac
+# This add-on's version (its config.yaml is copied in), for the check-in
+ADDON_VERSION="$(sed -n 's/^version: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "$APP/config.yaml" 2>/dev/null | head -n1)"
+# How often test homes check (seconds)
+TEST_EVERY="${LUXEIA_TEST_EVERY:-900}"
 
 option() { # name: its value from options.json ("" when unset)
   python3 -I -c '
@@ -170,7 +177,7 @@ check() {
     fi
     status true running ""
     local out code
-    out="$(LUXEIA_DIR="$STATE" WWW_DIR="$LIVE" VERSION_FILE="$STATE/version" \
+    out="$(LUXEIA_DIR="$STATE" WWW_DIR="$LIVE" VERSION_FILE="$STATE/version" LUXEIA_ADDON_VERSION="$ADDON_VERSION" \
       KEYS_DIR="$APP/keys" APPROVAL_KEYS_DIR="$APP/approval-keys" \
       bash "$APP/check-update.sh" 2>&1)"
     code=$?
@@ -201,6 +208,12 @@ if at <= now:
     at += datetime.timedelta(days=1)
 print(int((at - now).total_seconds()))
 '
+}
+
+# Until the next check: test homes (the server's "beta" channel, which
+# check-update.sh keeps in $STATE/channel) every 15 minutes, others tonight
+until_next() {
+  if [ "$(cat "$STATE/channel" 2>/dev/null)" = beta ]; then echo "$TEST_EVERY"; else until_tonight; fi
 }
 
 # --- Running ---------------------------------------------------------------------
@@ -234,14 +247,15 @@ listen() { # handles "check" lines (hassio.addon_stdin sends them as JSON string
 case "${LUXEIA_ONCE:-}" in
   1) check; code=$?; sync_guest_page; exit "$code" ;;
   stdin) listen; exit 0 ;;
+  next) until_next; exit 0 ;;
 esac
 
 trap 'kill $(jobs -p) 2>/dev/null; exit 0' TERM INT
-log "Running as ${SLUG}"
+log "Running as ${SLUG}, version ${ADDON_VERSION:-unknown}"
 start_server
 sync_guest_page
 check
-( while true; do sleep "$(until_tonight)"; check; done ) &
+( while true; do sleep "$(until_next)"; check; done ) &
 watch_asked &
 listen
 # stdin closed: keep serving until the add-on is stopped

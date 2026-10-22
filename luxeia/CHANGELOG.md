@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0
+
+- Test homes check for an approved build every 15 minutes, so a build
+  approved for them arrives within minutes; other homes still check once
+  a night.
+- Reports its own version to Luxeia's update server, so the admin page
+  shows which homes still need the add-on's Update.
+
 ## 1.1.1
 
 - The page the app opens on now fetches its instructions fresh every

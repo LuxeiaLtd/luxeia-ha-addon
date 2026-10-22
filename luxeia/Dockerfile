@@ -7,7 +7,7 @@ FROM $BUILD_FROM
 RUN apk add --no-cache openssl python3
 
 # Copied in by scripts/package-addon.sh: the same updater and keys homes use
-COPY run.sh serve.py check-update.sh verify-build.sh opener.html opener.js /opt/luxeia/
+COPY run.sh serve.py check-update.sh verify-build.sh opener.html opener.js config.yaml /opt/luxeia/
 COPY keys/ /opt/luxeia/keys/
 COPY approval-keys/ /opt/luxeia/approval-keys/
 RUN chmod a+x /opt/luxeia/*.sh
