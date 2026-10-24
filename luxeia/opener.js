@@ -8,7 +8,8 @@
 
   It asks Home Assistant, as the person already signed in to the HA app (or
   browser) around it, for a session for the add-on (ingress), and opens the
-  add-on's own page in its place. People who can't change settings can only
+  add-on's own page in its place (or, from the touch displays' opener,
+  display-opener.html, its display/ page: LUXEIA_OPEN_PATH). People who can't change settings can only
   ask about an add-on whose id they know, so it tries this add-on's own id
   first (run.sh writes it into ADDON), then every other id Luxeia Home can
   have.
@@ -74,7 +75,7 @@
         // As Home Assistant's own add-on panels set it
         document.cookie = 'ingress_session=' + s.session + ';path=/api/hassio_ingress/;SameSite=Strict'
           + (location.protocol === 'https:' ? ';Secure' : '');
-        location.replace(info.ingress_url + location.hash);
+        location.replace(info.ingress_url + (window.LUXEIA_OPEN_PATH || '') + location.hash);
       });
     }).catch(function () {
       say('Can’t reach Luxeia Home just now. Trying again…');

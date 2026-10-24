@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+
+- Ready for Shelly Wall Displays: for a home with touch displays set up on
+  Luxeia's admin page, it also fetches the touch display dashboard (signed
+  with its own key, approved separately) and shows it at
+  /local/luxeia-display/index.html for the displays' dashboard. Homes
+  without displays are unchanged.
+
 ## 1.3.1
 
 - Writing how its last check went can no longer get in the way of a new

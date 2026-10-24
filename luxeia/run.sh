@@ -13,6 +13,11 @@
 #     to keep each file until the next build;
 #   - update-status.json beside the build says how the last check went
 #     ({running, finished, result, message}), for the app;
+#   - for homes with Shelly Wall Displays fitted (set on the admin page), it
+#     also fetches the touch display app (the updater with
+#     LUXEIA_PRODUCT=display, its own keys in display-keys/), serves it at
+#     display/ under ingress, and puts its opener at
+#     /config/www/luxeia-display/index.html for the displays' dashboard;
 #   - with "Keep only the guest page public" on, /config/www/luxeia-dashboard
 #     (HA's public /local/ folder) holds just the guest page's files
 #     (guest-files.txt in each build), so guest links keep working, and the
@@ -46,6 +51,10 @@ WWW="$DATA/www"
 LIVE="$WWW/luxeia-dashboard"  # what's served
 WAITING="$WWW/waiting"        # served until the first build arrives
 PUBLIC="$HA_CONFIG/www/luxeia-dashboard"
+# The touch display app (homes with Shelly Wall Displays): its own state, build and public opener
+DISPLAY_STATE="$STATE/display"
+DISPLAY_LIVE="$WWW/luxeia-display"
+DISPLAY_PUBLIC="$HA_CONFIG/www/luxeia-display"
 
 log() { echo "[luxeia] $*"; }
 
@@ -81,12 +90,18 @@ HOME_KEY=""
 KEY_FROM=""     # key | code | none, for the app's set-up check
 KEY_PROBLEM=""  # why a set-up code didn't work
 
-# The updater reads its key from update.conf, never its command line
+# The updater reads its key from update.conf, never its command line (the
+# touch display app's run has a copy in its own folder)
 write_conf() {
-  (umask 077; {
-    echo "HOME_KEY=${HOME_KEY}"
-    [ -n "$SERVER" ] && echo "SERVER=${SERVER}"
-  } > "$STATE/update.conf")
+  mkdir -p "$DISPLAY_STATE"
+  chmod 700 "$DISPLAY_STATE"
+  local f
+  for f in "$STATE/update.conf" "$DISPLAY_STATE/update.conf"; do
+    (umask 077; {
+      echo "HOME_KEY=${HOME_KEY}"
+      [ -n "$SERVER" ] && echo "SERVER=${SERVER}"
+    } > "$f")
+  done
 }
 
 # The home key, from the add-on's options: the key itself, or a set-up code
@@ -190,7 +205,7 @@ font:17px/1.5 Montserrat,Roboto,system-ui,sans-serif;text-align:center;padding:2
 # restart
 start_server() {
   # shellcheck disable=SC2086
-  $SERVER_CMD "$APP/serve.py" "$PORT" "$ALLOW_IP" "$LIVE" "$WAITING" "$ASKED" &
+  $SERVER_CMD "$APP/serve.py" "$PORT" "$ALLOW_IP" "$LIVE" "$WAITING" "$ASKED" "$DISPLAY_LIVE" &
 }
 
 # --- Keeping only the guest page public -----------------------------------------
@@ -234,6 +249,48 @@ sync_guest_page() {
   log "Only the guest page and the opener are public now (www/luxeia-dashboard)."
 }
 
+# --- The touch display app (homes with Shelly Wall Displays) -----------------------
+
+# Its opener, at /local/luxeia-display/index.html: the displays' Home Assistant
+# dashboard shows it, and it goes on into display/ under this add-on's ingress
+# (opener.js, with this add-on's id, as the phone app's opener does)
+display_opener() {
+  local new="$HA_CONFIG/www/.luxeia-display.new" old="$HA_CONFIG/www/.luxeia-display.old"
+  rm -rf "$new" "$old"
+  mkdir -p "$new"
+  cp "$APP/display-opener.html" "$new/index.html" \
+    && sed "s/var ADDON = 'local_luxeia';/var ADDON = '${SLUG}';/" "$APP/opener.js" > "$new/opener.js" \
+    && grep -q "var ADDON = '${SLUG}';" "$new/opener.js" \
+    || { log "Couldn't copy the touch displays' opener"; rm -rf "$new"; return 1; }
+  if [ -d "$DISPLAY_PUBLIC" ] && diff -r "$new" "$DISPLAY_PUBLIC" >/dev/null 2>&1; then
+    rm -rf "$new"
+    return 0
+  fi
+  [ -d "$DISPLAY_PUBLIC" ] && mv "$DISPLAY_PUBLIC" "$old"
+  mv "$new" "$DISPLAY_PUBLIC" && rm -rf "$old"
+  log "The touch displays' dashboard address is /local/luxeia-display/index.html"
+}
+
+check_display() {
+  local out code
+  out="$(LUXEIA_PRODUCT=display LUXEIA_DIR="$DISPLAY_STATE" WWW_DIR="$DISPLAY_LIVE" VERSION_FILE="$DISPLAY_STATE/version" \
+    LUXEIA_ADDON_VERSION="$ADDON_VERSION" KEYS_DIR="$APP/display-keys" APPROVAL_KEYS_DIR="$APP/approval-keys" \
+    bash "$APP/check-update.sh" 2>&1)"
+  code=$?
+  case "$out" in
+    *"No touch displays at this home"*)
+      # Taken off on the admin page: nothing of it is served or left public
+      if [ -d "$DISPLAY_LIVE" ] || [ -d "$DISPLAY_PUBLIC" ]; then
+        rm -rf "$DISPLAY_LIVE" "$DISPLAY_PUBLIC" "$DISPLAY_STATE/previous" "$DISPLAY_STATE/version"
+        log "Touch displays: none at this home now, so their dashboard has been removed"
+      fi
+      return 0 ;;
+  esac
+  [ -n "$out" ] && log "Touch displays: $out"
+  [ -f "$DISPLAY_LIVE/index.html" ] && display_opener
+  return "$code"
+}
+
 # --- Checking for a new build ----------------------------------------------------
 
 check() {
@@ -263,15 +320,18 @@ check() {
     if [ "$code" != 0 ]; then
       [ -f "$LIVE/index.html" ] || waiting_page "Luxeia Home couldn't fetch the dashboard yet. It'll try again tonight, or restart the add-on to try now."
       status false failed "$(printf '%s' "$out" | tail -n1)"
-      exit 1
+    else
+      case "$out" in
+        *Installed*)
+          status false installed "$(printf '%s' "$out" | tail -n1)"
+          sync_guest_page ;;
+        *paused*) status false paused "" ;;
+        *) status false latest "" ;;
+      esac
     fi
-    case "$out" in
-      *Installed*)
-        status false installed "$(printf '%s' "$out" | tail -n1)"
-        sync_guest_page ;;
-      *paused*) status false paused "" ;;
-      *) status false latest "" ;;
-    esac
+    # The touch display app, whatever happened to the phone app's
+    check_display
+    [ "$code" = 0 ] || exit 1
   ) 9>"$STATE/lock"
 }
 

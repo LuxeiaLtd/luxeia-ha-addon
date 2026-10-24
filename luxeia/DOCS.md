@@ -5,7 +5,7 @@ up to date by Luxeia's update server.
 
 - People don't have to find it: the Home Assistant app still opens on the
   home's usual Luxeia dashboard (the Webpage dashboard showing
-  `/local/luxeia-dashboard/`, set as the default), at home or away. With
+  `/local/luxeia-dashboard/index.html`, set as the default), at home or away. With
   **Keep only the guest page public** on, that address holds a small
   opener page that takes them straight into the add-on, signed in as
   themselves. It also appears in the sidebar as **Luxeia Home**.
@@ -30,7 +30,7 @@ Home Assistant now calls add-ons **apps** (Settings › Apps, the App Store,
    (RELEASING.md › The Luxeia add-on).
 3. **Give it the home's set-up code:** the add-on's **Configuration** tab ›
    **Home key or set-up code**: the short code from Luxeia's update admin
-   page (Homes › Add a home, or Set-up code beside the home), like
+   page (Homes › Add a home, or the home's Manage › Set-up code), like
    `ABCDE-23456` (capitals, spaces and the dash don't matter). Switch on
    **Keep only the guest page public**. Save. When it starts, the add-on
    swaps the code for the home's own key and keeps it (a full `lxh_` key
@@ -40,7 +40,8 @@ Home Assistant now calls add-ons **apps** (Settings › Apps, the App Store,
    administrator opens it). You can hide the sidebar's Luxeia Home entry
    later if two entries look confusing.
 5. **Make it open by itself:** a Webpage dashboard showing
-   `/local/luxeia-dashboard/`, set as the default. With **Keep only the
+   `/local/luxeia-dashboard/index.html` (with `index.html`: Home
+   Assistant answers 403 for the folder on its own), set as the default. With **Keep only the
    guest page public** on, that address holds the opener, which goes
    straight on to the add-on. (Home Assistant can't make an add-on's own
    panel the screen the app opens on, so never remove this dashboard.)
@@ -67,6 +68,14 @@ The add-on's log warns if the home still has the old nightly update from
 before the add-on (`/config/scripts/check-update.sh`): remove its shell
 command from `configuration.yaml`, the script and `/config/.luxeia/`, and
 restart Home Assistant.
+
+## Touch displays
+
+For a home with Shelly Wall Displays, Luxeia marks it on the update
+server, and Luxeia Home then fetches the touch display dashboard too, at
+its next check. Point the displays' dashboard (a Webpage dashboard, shown
+only on the displays) at `/local/luxeia-display/index.html`. Homes
+without displays get nothing extra.
 
 ## If something's wrong
 

@@ -16,7 +16,14 @@
 # channel; the server decides now).
 #
 # The add-on sets LUXEIA_DIR, WWW_DIR and VERSION_FILE to its own folders,
-# and LUXEIA_ADDON_VERSION (reported in the check-in). The server's channel
+# and LUXEIA_ADDON_VERSION (reported in the check-in).
+#
+# LUXEIA_PRODUCT=display fetches the touch display app instead (for homes
+# with Shelly Wall Displays fitted), into its own folders, checked against
+# its own build keys (KEYS_DIR, the add-on's display-keys/): its approval
+# and build both say "product": "display" and it's named build-display-…,
+# so neither app can be installed as the other. A home without displays is
+# told so, and that run ends quietly (no check-in). The server's channel
 # for this home ("beta" for test homes) is kept in $LUXEIA_DIR/channel, so
 # the add-on can check test homes more often.
 #
@@ -33,6 +40,8 @@ CONF="${LUXEIA_DIR}/update.conf"
 PREVIOUS="${LUXEIA_DIR}/previous"
 SEQ_FILE="${LUXEIA_DIR}/approval-seq"
 ASSET="dashboard.tar.gz"
+PRODUCT="${LUXEIA_PRODUCT:-phone}"
+case "$PRODUCT" in phone|display) ;; *) echo "Unknown product: ${PRODUCT}" >&2; exit 1 ;; esac
 
 conf_value() { # NAME: its value from update.conf (read, never run)
   [ -f "$CONF" ] || return 0
@@ -80,16 +89,27 @@ server() { # path [curl options...]
 checkin() { # problem (empty when all is well)
   local version=""
   [ -f "$WWW_DIR/build.json" ] && version="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$WWW_DIR/build.json" | head -n1)"
-  python3 -I -c 'import json, sys; print(json.dumps({"version": sys.argv[1], "error": sys.argv[2][:300], "addon": sys.argv[3]}))' "$version" "$1" "${LUXEIA_ADDON_VERSION:-}" > "$WORK/checkin.json"
+  python3 -I -c '
+import json, sys
+out = {"version": sys.argv[1], "error": sys.argv[2][:300], "addon": sys.argv[3]}
+if sys.argv[4] != "phone":
+    out["product"] = sys.argv[4]
+print(json.dumps(out))' "$version" "$1" "${LUXEIA_ADDON_VERSION:-}" "$PRODUCT" > "$WORK/checkin.json"
   server /v1/checkin -X POST -H 'Content-Type: application/json' --data-binary "@$WORK/checkin.json" -o /dev/null 2>/dev/null || true
 }
 fail() { echo "$*" >&2; checkin "$*"; exit 1; }
 done_ok() { checkin ""; exit 0; }
 
-ls "$KEYS_DIR"/*.pem >/dev/null 2>&1 || fail "Refused: this home has no build keys (copy updater/keys/ to $KEYS_DIR)"
-ls "$APPROVAL_KEYS_DIR"/*.pem >/dev/null 2>&1 || fail "Refused: this home has no approval keys (copy updater/approval-keys/ to $APPROVAL_KEYS_DIR)"
+have_keys() {
+  ls "$KEYS_DIR"/*.pem >/dev/null 2>&1 || fail "Refused: this home has no build keys (copy updater/keys/ to $KEYS_DIR)"
+  ls "$APPROVAL_KEYS_DIR"/*.pem >/dev/null 2>&1 || fail "Refused: this home has no approval keys (copy updater/approval-keys/ to $APPROVAL_KEYS_DIR)"
+}
+# The touch displays' keys only matter once a display build is offered
+[ "$PRODUCT" = phone ] && have_keys
 
-server /v1/update -o "$WORK/update.json" 2>"$WORK/curl.err" \
+QUERY=""
+[ "$PRODUCT" = phone ] || QUERY="?product=${PRODUCT}"
+server "/v1/update${QUERY}" -o "$WORK/update.json" 2>"$WORK/curl.err" \
   || fail "Couldn't reach the update server, or it didn't recognise this home's key: $(tr '\n' ' ' < "$WORK/curl.err")"
 
 # The answer, written out byte for byte so the signatures can be checked
@@ -97,9 +117,12 @@ offer="$(python3 -I -c '
 import json, re, sys
 d = json.load(open(sys.argv[1]))
 channel = d.get("channel")
-if isinstance(channel, str) and re.fullmatch(r"[a-z]{1,20}", channel):
+if isinstance(channel, str) and re.fullmatch(r"[a-z]{1,20}", channel) and sys.argv[4] == "phone":
   open(sys.argv[3], "w").write(channel + "\n")
-if d.get("paused"):
+if d.get("fitted") is False or (sys.argv[4] != "phone" and d.get("product") != sys.argv[4]):
+  # Not fitted here, or an update server from before there were two apps
+  print("notfitted")
+elif d.get("paused"):
   print("paused")
 elif d.get("none"):
   print("none")
@@ -108,12 +131,14 @@ else:
                      ("build-manifest.json", d["build"]["manifest"]), ("build-manifest.sig", d["build"]["sig"])):
       open(sys.argv[2] + "/" + name, "wb").write(text.encode("utf-8"))
   print("offer " + d["download"])
-' "$WORK/update.json" "$WORK" "$LUXEIA_DIR/channel")" || fail "The update server's answer wasn't readable"
+' "$WORK/update.json" "$WORK" "$LUXEIA_DIR/channel" "$PRODUCT")" || fail "The update server's answer wasn't readable"
 case "$offer" in
+  notfitted) echo "No touch displays at this home"; exit 0 ;;
   paused) echo "Updates are paused; keeping this build"; done_ok ;;
   none) echo "Nothing approved for this home yet"; done_ok ;;
 esac
 download="${offer#offer }"
+[ "$PRODUCT" = phone ] || have_keys
 
 # 1. The owner approved it: signed with an approval key
 out="$(bash "$HERE/verify-build.sh" --signature "$WORK/approval.json" "$WORK/approval.sig" "$APPROVAL_KEYS_DIR" 2>&1)" \
@@ -126,12 +151,17 @@ facts="$(python3 -I -c '
 import json, re, sys
 a = json.load(open(sys.argv[1]))
 b = json.load(open(sys.argv[2]))
+product = sys.argv[3]
+name = a.get("build") or ""
 ok = (a.get("build") == b.get("build") and a.get("sha256") == b.get("sha256")
     and re.fullmatch(r"[0-9a-f]{64}", a.get("sha256") or "") and type(a.get("seq")) is int and a["seq"] > 0
-    and re.fullmatch(r"build-[A-Za-z0-9._-]+", a.get("build") or ""))
+    and re.fullmatch(r"build-[A-Za-z0-9._-]+", name)
+    # Both say they are this app (the phone app says nothing, from before there were two)
+    and (a.get("product") or "phone") == product and (b.get("product") or "phone") == product
+    and name.startswith("build-display-") == (product == "display"))
 print("%d %s %s" % (a["seq"], a["sha256"], a["build"]) if ok else "mismatch")
-' "$WORK/approval.json" "$WORK/build-manifest.json")" || fail "Refused: the approval isn't readable"
-[ "$facts" != mismatch ] || fail "Refused: the approval and the build don't match"
+' "$WORK/approval.json" "$WORK/build-manifest.json" "$PRODUCT")" || fail "Refused: the approval isn't readable"
+[ "$facts" != mismatch ] || fail "Refused: the approval and the build don't match, or aren't for this app"
 seq="${facts%% *}"
 rest="${facts#* }"
 sha="${rest%% *}"

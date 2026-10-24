@@ -1,0 +1,43 @@
+<!doctype html>
+<!--
+  The touch displays' opener: opener.html's twin for homes with Shelly Wall
+  Displays. The Luxeia add-on puts it at /local/luxeia-display/index.html,
+  which the displays' Home Assistant dashboard shows. Like the phone app's
+  opener it holds none of the dashboard and does nothing itself: it fetches
+  opener.js fresh on every open, which opens the add-on's display/ page
+  (LUXEIA_OPEN_PATH) in this one's place. Displays keep their own copy of
+  this page, so keep it as it is: every change goes in opener.js.
+-->
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Luxeia Home</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #161616; color: #F2EFE9;
+    font: 17px/1.5 Montserrat, Roboto, system-ui, sans-serif; text-align: center; padding: 24px; box-sizing: border-box; }
+  @media (prefers-color-scheme: light) { body { background: #F5F1EA; color: #222222; } }
+  svg { width: 56px; height: 56px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <svg viewBox="37 42 1032 1032" aria-hidden="true"><polygon points="553,42 1069,558 553,1074 37,558" fill="#BA9947"/><path d="M454 383H540V649H659V730H454Z" fill="#FFFFFF"/></svg>
+  <p id="msg" role="status" aria-live="polite">Opening Luxeia Home…</p>
+</main>
+<script>
+  window.LUXEIA_OPEN_PATH = 'display/';
+  (function () {
+    var s = document.createElement('script');
+    s.src = '/local/luxeia-display/opener.js?t=' + Date.now();
+    s.onerror = function () {
+      document.getElementById('msg').textContent = 'Can’t reach Luxeia Home just now. Trying again…';
+      setTimeout(function () { location.reload(); }, 5000);
+    };
+    document.body.appendChild(s);
+  })();
+</script>
+</body>
+</html>
