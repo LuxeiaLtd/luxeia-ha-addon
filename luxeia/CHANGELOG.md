@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.1
+
+- Trusts the touch display dashboard's own signing key, so homes with
+  touch displays can install it once a build is approved.
+
 ## 1.4.0
 
 - Ready for Shelly Wall Displays: for a home with touch displays set up on

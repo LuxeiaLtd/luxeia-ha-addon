@@ -7,5 +7,7 @@ display upload only if it's signed with one in its `DISPLAY_BUILD_KEYS`.
 They're kept apart from `updater/keys/` (the phone app's build keys), so a
 leaked display key can't sign a phone build, and the other way round.
 
-Until a key is here, no home installs a display build. To add the first
-one, see RELEASING.md › Touch displays.
+`luxeia-display-1.pem` is the live key (October 2026): its private half
+is the `LUXEIA_BUILD_KEY` secret of the touch display repo's `release`
+environment, and the owner's password manager. Adding or replacing one:
+RELEASING.md › Touch displays.
