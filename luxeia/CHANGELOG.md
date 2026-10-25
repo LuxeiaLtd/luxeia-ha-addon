@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.2
+
+- Touch displays can open Luxeia Home on their own: set the display to
+  open /local/luxeia-display/index.html, sign in once, and it connects by
+  itself, without Home Assistant's dashboard underneath (too slow on the
+  4-inch display in a big home).
+- Opening Luxeia Home gives up on a step that doesn't answer within 15
+  seconds (it used to wait minutes), says which step it's on, and when it
+  can't, says why in small print and in Home Assistant's log.
+
 ## 1.4.1
 
 - Trusts the touch display dashboard's own signing key, so homes with

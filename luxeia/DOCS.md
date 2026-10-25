@@ -73,9 +73,13 @@ restart Home Assistant.
 
 For a home with Shelly Wall Displays, Luxeia marks it on the update
 server, and Luxeia Home then fetches the touch display dashboard too, at
-its next check. Point the displays' dashboard (a Webpage dashboard, shown
-only on the displays) at `/local/luxeia-display/index.html`. Homes
-without displays get nothing extra.
+its next check. On each display, in the Shelly's own settings, set the
+page it opens to `http://<this home's local address>:8123/local/luxeia-display/index.html`
+and sign in once as the display's own user: it then opens Luxeia Home by
+itself, without Home Assistant's dashboard underneath (which is too slow
+on the smaller displays in a big home). If it can't open, the screen says
+which step it was on, and Settings › System › Logs has a "luxeia.display"
+line. Homes without displays get nothing extra.
 
 ## If something's wrong
 
