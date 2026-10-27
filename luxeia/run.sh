@@ -40,8 +40,8 @@
 # LUXEIA_ONCE=beat sends one heartbeat and prints the seconds until the next
 # (LUXEIA_ONCE=health: the same for the health report).
 # LUXEIA_APP_DIR, LUXEIA_DATA_DIR, HA_CONFIG_DIR, LUXEIA_SERVER_CMD,
-# LUXEIA_PORT, LUXEIA_ALLOW_IP and LUXEIA_CORE_API replace the add-on's own
-# paths and settings.
+# LUXEIA_PORT, LUXEIA_ALLOW_IP, LUXEIA_CORE_API and LUXEIA_S6_ENV replace the
+# add-on's own paths and settings.
 set -uo pipefail
 
 APP="${LUXEIA_APP_DIR:-/opt/luxeia}"
@@ -64,6 +64,20 @@ DISPLAY_LIVE="$WWW/luxeia-display"
 DISPLAY_PUBLIC="$HA_CONFIG/www/luxeia-display"
 
 log() { echo "[luxeia] $*"; }
+
+# The Supervisor's token, for asking Home Assistant (the heartbeat and the
+# health report). The add-on base image starts us through s6-overlay, which
+# clears the environment the Supervisor gave the container and keeps it in
+# files instead (what with-contenv reads back): without this, 1.6.1 sent
+# empty health reports ("no access to Home Assistant") and the heartbeat
+# couldn't tell whether Home Assistant answers. Exported, never put on a
+# command line.
+S6_ENV="${LUXEIA_S6_ENV:-/run/s6/container_environment}"
+for name in SUPERVISOR_TOKEN HASSIO_TOKEN; do
+  [ -n "${SUPERVISOR_TOKEN:-}" ] && break
+  [ -r "$S6_ENV/$name" ] && SUPERVISOR_TOKEN="$(cat "$S6_ENV/$name")"
+done
+[ -n "${SUPERVISOR_TOKEN:-}" ] && export SUPERVISOR_TOKEN
 
 # This add-on's id: local_luxeia when copied in by hand, <code>_luxeia from
 # the add-on store. Home Assistant names its container after it, with "-"

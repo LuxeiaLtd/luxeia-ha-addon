@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.2
+
+- Fixed: the health report said it "couldn't read everything (no access
+  to Home Assistant)", and the heartbeat couldn't tell whether Home
+  Assistant was answering. The add-on now finds the access Home
+  Assistant gives it, which the add-on base image keeps in a file.
+
 ## 1.6.1
 
 - Fixed: 1.6.0's health reports never reached Luxeia (Cloudflare turned
