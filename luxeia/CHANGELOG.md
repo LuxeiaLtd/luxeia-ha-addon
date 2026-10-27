@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.1
+
+- Fixed: 1.6.0's health reports never reached Luxeia (Cloudflare turned
+  away Python's own name for itself). They're sent with the add-on's own
+  name now.
+- If a health report can't be sent, the add-on's log says why, and says
+  when the first one after a start has been sent.
+
 ## 1.6.0
 
 - Every 30 minutes, tells Luxeia how the home is: Home Assistant's

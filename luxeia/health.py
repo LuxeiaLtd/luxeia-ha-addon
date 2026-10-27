@@ -17,17 +17,25 @@ devices, rooms or people are sent, only counts by integration.
 
 The home key is read from update.conf and the Supervisor's token from
 SUPERVISOR_TOKEN, never the command line. Prints the seconds until the next
-report (the server's `every`, 600 to 21600; 1800 otherwise), and never fails
-loudly: a home that can't report just tries again later.
+report (the server's `every`, 600 to 21600; 1800 otherwise). A report that
+can't be sent says why on stderr (the add-on's log) and is tried again
+later; the first one sent after the add-on starts says so too (run.sh
+removes health-sent, beside update.conf, at start).
+
+It sends with its own name (User-Agent): Cloudflare's browser check turns
+away Python's own ("Python-urllib", error 1010), so 1.6.0's reports never
+arrived.
 LUXEIA_SUPERVISOR replaces http://supervisor, for tests.
 """
 import json
 import os
 import re
 import sys
+import urllib.error
 import urllib.request
 
 EVERY = 1800
+AGENT = "LuxeiaHome-addon"
 SUPERVISOR = os.environ.get("LUXEIA_SUPERVISOR", "http://supervisor")
 TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
 
@@ -67,7 +75,7 @@ PROBLEM_STATES = {"setup_error", "setup_retry", "migration_error", "failed_unloa
 def call(path, data=None, timeout=20):
     """The Supervisor's (or, under /core/api, Home Assistant's) answer, or None"""
     req = urllib.request.Request(SUPERVISOR + path, data=None if data is None else json.dumps(data).encode(),
-                                 headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/json"})
+                                 headers={"Authorization": "Bearer " + TOKEN, "Content-Type": "application/json", "User-Agent": AGENT})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as res:
             body = res.read(2_000_000).decode("utf-8", "replace")
@@ -170,12 +178,29 @@ def conf(path):
     return values
 
 
+def log(text):
+    print("[luxeia] Health report: " + text, file=sys.stderr, flush=True)
+
+
+def why(e):
+    """A failed send in a line: the server's status and the start of its answer"""
+    if isinstance(e, urllib.error.HTTPError):
+        try:
+            body = e.read(300).decode("utf-8", "replace")
+        except Exception:
+            body = ""
+        body = " ".join(body.split())[:200]
+        return "the update server answered %s%s" % (e.code, ": " + body if body else "")
+    return "couldn't reach the update server (%s)" % (getattr(e, "reason", None) or e)
+
+
 def main():
     if len(sys.argv) < 3:
         print(EVERY)
         return
     c = conf(sys.argv[1])
     key = c.get("HOME_KEY", "")
+    sent = os.path.join(os.path.dirname(sys.argv[1]) or ".", "health-sent")
     if not key:
         print(EVERY)
         return
@@ -186,19 +211,27 @@ def main():
         body["missing"] = missing[:10]
     every = EVERY
     req = urllib.request.Request((c.get("SERVER") or "https://updates.luxeia.co.uk") + "/v1/health", data=json.dumps(body).encode(),
-                                 headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
+                                 headers={"Authorization": "Bearer " + key, "Content-Type": "application/json", "User-Agent": AGENT + "/" + sys.argv[2][:20]})
     try:
         with urllib.request.urlopen(req, timeout=30) as res:
             n = int(json.loads(res.read(10_000)).get("every") or EVERY)
             if 600 <= n <= 21600:
                 every = n
-    except Exception:
-        pass
+        if not os.path.exists(sent):
+            log("sent" + (" (it couldn't read: %s)" % ", ".join(missing) if missing else "") + "; the next in %d minutes" % (every // 60))
+            open(sent, "w").close()
+    except Exception as e:
+        log("not sent: %s. It'll try again in %d minutes." % (why(e), every // 60))
+        try:
+            os.remove(sent)
+        except OSError:
+            pass
     print(every)
 
 
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
+    except Exception as e:
+        log("not sent: something went wrong making it (%s: %s)" % (type(e).__name__, e))
         print(EVERY)

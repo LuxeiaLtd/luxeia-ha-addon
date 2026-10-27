@@ -394,7 +394,8 @@ heartbeat() {
 }
 
 # How the home is (health.py), every 30 minutes: it prints the seconds until the next
-health() { python3 -I "$APP/health.py" "$STATE/update.conf" "$ADDON_VERSION" 2>/dev/null || echo 1800; }
+# What went wrong goes to the add-on's log (its stderr), never silently away
+health() { python3 -I "$APP/health.py" "$STATE/update.conf" "$ADDON_VERSION" || echo 1800; }
 
 # --- Running ---------------------------------------------------------------------
 
@@ -440,6 +441,8 @@ check
 ( while true; do sleep "$(until_next)"; check; done ) &
 # After the first check, which gets the key (a set-up code is swapped for it then)
 ( while true; do sleep "$(heartbeat)"; done ) &
+# The first report sent after a start is logged (health.py)
+rm -f "$STATE/health-sent"
 ( while true; do sleep "$(health)"; done ) &
 watch_asked &
 listen
