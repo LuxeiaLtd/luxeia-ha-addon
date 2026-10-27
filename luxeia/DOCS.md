@@ -15,8 +15,9 @@ up to date by Luxeia's update server.
   if it carries both Luxeia's signatures, and keeps the previous build.
 - Every 5 minutes it tells Luxeia's update server that it's running and
   whether Home Assistant answers, so Luxeia hears within minutes when the
-  home goes offline. It only reports how the home is; nothing can be
-  changed in the home that way.
+  home goes offline, and every 30 minutes how the home is (disk,
+  backups, add-ons, integrations, how many devices are offline). It only
+  reports; nothing can be changed in the home that way.
 - Guest links keep working: with **Keep only the guest page public** on,
   `www/luxeia-dashboard` holds just the guest page and the opener.
 

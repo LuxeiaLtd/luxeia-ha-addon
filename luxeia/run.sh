@@ -20,8 +20,9 @@
 #     /config/www/luxeia-display/index.html for the displays' dashboard;
 #   - every 5 minutes it tells the update server it's running, and whether
 #     Home Assistant itself answers (the heartbeat), so Luxeia hears within
-#     minutes when a home goes offline. Report only: the server can't ask
-#     anything of the home;
+#     minutes when a home goes offline, and every 30 minutes how it is
+#     (health.py: disk, backups, add-ons, integrations, offline devices).
+#     Report only: the server can't ask anything of the home;
 #   - with "Keep only the guest page public" on, /config/www/luxeia-dashboard
 #     (HA's public /local/ folder) holds just the guest page's files
 #     (guest-files.txt in each build), so guest links keep working, and the
@@ -36,7 +37,8 @@
 # For tests, LUXEIA_ONCE=1 runs one check and stops (no web server or
 # timer), LUXEIA_ONCE=stdin handles stdin's lines and stops at its end, and
 # LUXEIA_ONCE=next prints the seconds until the next check, and
-# LUXEIA_ONCE=beat sends one heartbeat and prints the seconds until the next.
+# LUXEIA_ONCE=beat sends one heartbeat and prints the seconds until the next
+# (LUXEIA_ONCE=health: the same for the health report).
 # LUXEIA_APP_DIR, LUXEIA_DATA_DIR, HA_CONFIG_DIR, LUXEIA_SERVER_CMD,
 # LUXEIA_PORT, LUXEIA_ALLOW_IP and LUXEIA_CORE_API replace the add-on's own
 # paths and settings.
@@ -391,6 +393,9 @@ heartbeat() {
   echo "$BEAT_EVERY"
 }
 
+# How the home is (health.py), every 30 minutes: it prints the seconds until the next
+health() { python3 -I "$APP/health.py" "$STATE/update.conf" "$ADDON_VERSION" 2>/dev/null || echo 1800; }
+
 # --- Running ---------------------------------------------------------------------
 
 # "Check for updates" in the app (serve.py leaves the asked file)
@@ -424,6 +429,7 @@ case "${LUXEIA_ONCE:-}" in
   stdin) listen; exit 0 ;;
   next) until_next; exit 0 ;;
   beat) heartbeat; exit 0 ;;
+  health) health; exit 0 ;;
 esac
 
 trap 'kill $(jobs -p) 2>/dev/null; exit 0' TERM INT
@@ -434,6 +440,7 @@ check
 ( while true; do sleep "$(until_next)"; check; done ) &
 # After the first check, which gets the key (a set-up code is swapped for it then)
 ( while true; do sleep "$(heartbeat)"; done ) &
+( while true; do sleep "$(health)"; done ) &
 watch_asked &
 listen
 # stdin closed: keep serving until the add-on is stopped

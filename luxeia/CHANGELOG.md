@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.0
+
+- Every 30 minutes, tells Luxeia how the home is: Home Assistant's
+  version and updates, how full its disk is, its newest backup, whether
+  its add-ons are running, integrations that have stopped or need
+  signing in again, and how many devices are offline (counts only, no
+  names). It only reads: nothing can be changed in the home this way.
+  It reads the Supervisor's information for that, which is why Home
+  Assistant now lists the add-on as using it.
+
 ## 1.5.0
 
 - Tells Luxeia every 5 minutes that the home is online and whether Home
