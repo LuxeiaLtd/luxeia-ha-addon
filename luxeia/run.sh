@@ -18,6 +18,10 @@
 #     LUXEIA_PRODUCT=display, its own keys in display-keys/), serves it at
 #     display/ under ingress, and puts its opener at
 #     /config/www/luxeia-display/index.html for the displays' dashboard;
+#   - every 5 minutes it tells the update server it's running, and whether
+#     Home Assistant itself answers (the heartbeat), so Luxeia hears within
+#     minutes when a home goes offline. Report only: the server can't ask
+#     anything of the home;
 #   - with "Keep only the guest page public" on, /config/www/luxeia-dashboard
 #     (HA's public /local/ folder) holds just the guest page's files
 #     (guest-files.txt in each build), so guest links keep working, and the
@@ -31,10 +35,11 @@
 #
 # For tests, LUXEIA_ONCE=1 runs one check and stops (no web server or
 # timer), LUXEIA_ONCE=stdin handles stdin's lines and stops at its end, and
-# LUXEIA_ONCE=next prints the seconds until the next check.
+# LUXEIA_ONCE=next prints the seconds until the next check, and
+# LUXEIA_ONCE=beat sends one heartbeat and prints the seconds until the next.
 # LUXEIA_APP_DIR, LUXEIA_DATA_DIR, HA_CONFIG_DIR, LUXEIA_SERVER_CMD,
-# LUXEIA_PORT and LUXEIA_ALLOW_IP replace the add-on's own paths and
-# settings.
+# LUXEIA_PORT, LUXEIA_ALLOW_IP and LUXEIA_CORE_API replace the add-on's own
+# paths and settings.
 set -uo pipefail
 
 APP="${LUXEIA_APP_DIR:-/opt/luxeia}"
@@ -354,6 +359,38 @@ until_next() {
   if [ "$(cat "$STATE/channel" 2>/dev/null)" = beta ]; then echo "$TEST_EVERY"; else until_tonight; fi
 }
 
+# --- The heartbeat ------------------------------------------------------------------
+
+# Home Assistant's own API, through the Supervisor (homeassistant_api in config.yaml)
+CORE_API="${LUXEIA_CORE_API:-http://supervisor/core/api/}"
+BEAT_EVERY=300
+
+core_state() { # up | down | "" (can't tell: no access to Home Assistant)
+  [ -n "${SUPERVISOR_TOKEN:-}" ] || return 0
+  local code
+  # The Supervisor's token goes to curl on its standard input, never as an argument
+  code="$(printf 'header = "Authorization: Bearer %s"\n' "$SUPERVISOR_TOKEN" | curl -K - -sS -m 20 -o /dev/null -w '%{http_code}' "$CORE_API" 2>/dev/null)"
+  case "$code" in
+    200) echo up ;;
+    401|403) ;;
+    *) echo down ;;
+  esac
+}
+
+# Says it's running. The server answers how often it wants to hear (every,
+# in seconds), so it can ask big fleets for fewer without an add-on update.
+heartbeat() {
+  local key answer every
+  key="$(sed -n 's/^HOME_KEY=//p' "$STATE/update.conf" 2>/dev/null | tail -n1)"
+  if [ -n "$key" ]; then
+    answer="$(printf 'header = "Authorization: Bearer %s"\n' "$key" | curl -K - -sS -m 30 -X POST -H 'Content-Type: application/json' \
+      --data-binary "{\"addon\": \"${ADDON_VERSION}\", \"core\": \"$(core_state)\"}" "${SERVER:-https://updates.luxeia.co.uk}/v1/heartbeat" 2>/dev/null)"
+    every="$(printf '%s' "$answer" | sed -n 's/.*"every": *\([0-9][0-9]*\).*/\1/p')"
+    if [ -n "$every" ] && [ "$every" -ge 60 ] && [ "$every" -le 3600 ]; then BEAT_EVERY="$every"; fi
+  fi
+  echo "$BEAT_EVERY"
+}
+
 # --- Running ---------------------------------------------------------------------
 
 # "Check for updates" in the app (serve.py leaves the asked file)
@@ -386,6 +423,7 @@ case "${LUXEIA_ONCE:-}" in
   1) check; code=$?; sync_guest_page; exit "$code" ;;
   stdin) listen; exit 0 ;;
   next) until_next; exit 0 ;;
+  beat) heartbeat; exit 0 ;;
 esac
 
 trap 'kill $(jobs -p) 2>/dev/null; exit 0' TERM INT
@@ -394,6 +432,8 @@ start_server
 sync_guest_page
 check
 ( while true; do sleep "$(until_next)"; check; done ) &
+# After the first check, which gets the key (a set-up code is swapped for it then)
+( while true; do sleep "$(heartbeat)"; done ) &
 watch_asked &
 listen
 # stdin closed: keep serving until the add-on is stopped

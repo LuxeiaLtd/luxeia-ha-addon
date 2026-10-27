@@ -3,7 +3,7 @@
 # it up to date from Luxeia's update server. Installed locally: copy the
 # folder scripts/package-addon.sh makes to /addons/luxeia/ (addon/DOCS.md).
 name: Luxeia Home
-version: "1.4.2"
+version: "1.5.0"
 slug: luxeia
 description: Your Luxeia dashboard, kept up to date and only for people signed in to this home.
 url: https://luxeia.co.uk
@@ -24,6 +24,9 @@ panel_icon: mdi:home-variant
 panel_title: Luxeia Home
 # Everyone signed in to the home can open it, not only administrators
 panel_admin: false
+# The heartbeat asks Home Assistant's API whether it answers (run.sh), so
+# Luxeia knows when Home Assistant itself has stopped. It only asks.
+homeassistant_api: true
 # /homeassistant: to keep just the guest page public in www/luxeia-dashboard
 map:
   - homeassistant_config:rw

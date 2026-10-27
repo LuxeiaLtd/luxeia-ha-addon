@@ -13,6 +13,10 @@ up to date by Luxeia's update server.
 - Every night (at a random time between 2am and 5am) it asks Luxeia's
   update server for the build approved for this home. It installs it only
   if it carries both Luxeia's signatures, and keeps the previous build.
+- Every 5 minutes it tells Luxeia's update server that it's running and
+  whether Home Assistant answers, so Luxeia hears within minutes when the
+  home goes offline. It only reports how the home is; nothing can be
+  changed in the home that way.
 - Guest links keep working: with **Keep only the guest page public** on,
   `www/luxeia-dashboard` holds just the guest page and the opener.
 

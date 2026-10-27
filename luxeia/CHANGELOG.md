@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0
+
+- Tells Luxeia every 5 minutes that the home is online and whether Home
+  Assistant is answering, so Luxeia hears within minutes if a home goes
+  offline. It only reports: nothing can be changed in the home this way.
+  It asks Home Assistant's API for that, which is why Home Assistant now
+  lists the add-on as using it.
+
 ## 1.4.2
 
 - Touch displays can open Luxeia Home on their own: set the display to
