@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.1
+
+- Fixed: until Luxeia's update server has been updated for wall tablets,
+  1.7.0 logged "Wall tablets: Couldn't reach the update server … error:
+  400" at every check and could report it to Luxeia as a problem with
+  the home. It now takes that as "no wall tablets here", quietly.
+
 ## 1.7.0
 
 - Ready for wall tablets: for a home with wall tablets set up on Luxeia's

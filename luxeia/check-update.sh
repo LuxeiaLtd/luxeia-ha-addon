@@ -86,10 +86,12 @@ install_build() { # tarball (already checked)
 }
 
 # The home key goes to curl through its standard input, never as an argument
-server() { # path [curl options...]
-  local path="$1"
+server() { # path [--fail-with-body] [curl options...]
+  local path="$1" fail=-f
   shift
-  printf 'header = "Authorization: Bearer %s"\n' "$HOME_KEY" | curl -K - -fsSL "$@" "${SERVER}${path}"
+  # curl refuses -f together with --fail-with-body (which keeps an error's answer)
+  [ "${1:-}" = --fail-with-body ] && { fail=--fail-with-body; shift; }
+  printf 'header = "Authorization: Bearer %s"\n' "$HOME_KEY" | curl -K - "$fail" -sSL "$@" "${SERVER}${path}"
 }
 # Tells the server how this home is doing; it emails the owner about
 # homes that go quiet or report a problem
@@ -115,9 +117,21 @@ have_keys() {
 [ "$PRODUCT" = phone ] && have_keys
 
 QUERY=""
-[ "$PRODUCT" = phone ] || QUERY="?product=${PRODUCT}"
-server "/v1/update${QUERY}" -o "$WORK/update.json" 2>"$WORK/curl.err" \
-  || fail "Couldn't reach the update server, or it didn't recognise this home's key: $(tr '\n' ' ' < "$WORK/curl.err")"
+KEEP_BODY=""
+[ "$PRODUCT" = phone ] || { QUERY="?product=${PRODUCT}"; KEEP_BODY="--fail-with-body"; }
+# shellcheck disable=SC2086
+if ! server "/v1/update${QUERY}" $KEEP_BODY -o "$WORK/update.json" 2>"$WORK/curl.err"; then
+  # An update server from before this app (it isn't deployed yet) refuses
+  # it as "unknown product": that's no tablets here, not a problem, and
+  # isn't checked in (an older server would file it as the phone app's)
+  if [ "$PRODUCT" != phone ] && python3 -I -c '
+import json, sys
+sys.exit(0 if json.load(open(sys.argv[1])).get("error") == "unknown product" else 1)' "$WORK/update.json" 2>/dev/null; then
+    echo "$FITTED_NONE"
+    exit 0
+  fi
+  fail "Couldn't reach the update server, or it didn't recognise this home's key: $(tr '\n' ' ' < "$WORK/curl.err")"
+fi
 
 # The answer, written out byte for byte so the signatures can be checked
 offer="$(python3 -I -c '

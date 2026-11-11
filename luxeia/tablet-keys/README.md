@@ -9,5 +9,7 @@ app's build keys) and `updater/display-keys/` (the touch displays'), so a
 leaked wall tablet key can't sign another app's build, and the other way
 round.
 
-None yet: until the owner makes the key, homes install nothing for wall
-tablets. Adding one (`luxeia-tablet-1.pem`): RELEASING.md › Wall tablets.
+`luxeia-tablet-1.pem` is the live key (11 November 2026): its private
+half is the `LUXEIA_BUILD_KEY` secret of the wall tablet repo's `release`
+environment, and the owner's password manager. Adding or replacing one:
+RELEASING.md › Wall tablets.
