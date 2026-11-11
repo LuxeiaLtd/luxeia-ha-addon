@@ -86,6 +86,17 @@ on the smaller displays in a big home). If it can't open, the screen says
 which step it was on, and Settings › System › Logs has a "luxeia.display"
 line. Homes without displays get nothing extra.
 
+## Wall tablets
+
+For a home with wall tablets, Luxeia marks it on the update server, and
+Luxeia Home then fetches the wall tablet dashboard too, at its next
+check. On each tablet, set its browser (or kiosk app) to open
+`http://<this home's local address>:8123/local/luxeia-tablet/index.html`
+(the `index.html` matters) and sign in once as the tablet's own user: it
+then opens Luxeia Home by itself. If it can't open, the screen says which
+step it was on, and Settings › System › Logs has a "luxeia.tablet" line.
+Homes without wall tablets get nothing extra.
+
 ## If something's wrong
 
 The add-on's **Log** tab says what it did. Lines starting "Refused:" mean it

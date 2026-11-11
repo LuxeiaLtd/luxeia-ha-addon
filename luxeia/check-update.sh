@@ -23,7 +23,9 @@
 # its own build keys (KEYS_DIR, the add-on's display-keys/): its approval
 # and build both say "product": "display" and it's named build-display-…,
 # so neither app can be installed as the other. A home without displays is
-# told so, and that run ends quietly (no check-in). The server's channel
+# told so, and that run ends quietly (no check-in). LUXEIA_PRODUCT=tablet
+# is the wall tablet app, the same way (tablet-keys/, "product": "tablet",
+# build-tablet-…, "No wall tablets at this home"). The server's channel
 # for this home ("beta" for test homes) is kept in $LUXEIA_DIR/channel, so
 # the add-on can check test homes more often.
 #
@@ -41,7 +43,12 @@ PREVIOUS="${LUXEIA_DIR}/previous"
 SEQ_FILE="${LUXEIA_DIR}/approval-seq"
 ASSET="dashboard.tar.gz"
 PRODUCT="${LUXEIA_PRODUCT:-phone}"
-case "$PRODUCT" in phone|display) ;; *) echo "Unknown product: ${PRODUCT}" >&2; exit 1 ;; esac
+case "$PRODUCT" in
+  phone) FITTED_NONE="" ;;
+  display) FITTED_NONE="No touch displays at this home" ;;
+  tablet) FITTED_NONE="No wall tablets at this home" ;;
+  *) echo "Unknown product: ${PRODUCT}" >&2; exit 1 ;;
+esac
 
 conf_value() { # NAME: its value from update.conf (read, never run)
   [ -f "$CONF" ] || return 0
@@ -104,7 +111,7 @@ have_keys() {
   ls "$KEYS_DIR"/*.pem >/dev/null 2>&1 || fail "Refused: this home has no build keys (copy updater/keys/ to $KEYS_DIR)"
   ls "$APPROVAL_KEYS_DIR"/*.pem >/dev/null 2>&1 || fail "Refused: this home has no approval keys (copy updater/approval-keys/ to $APPROVAL_KEYS_DIR)"
 }
-# The touch displays' keys only matter once a display build is offered
+# The touch displays' and wall tablets' keys only matter once their build is offered
 [ "$PRODUCT" = phone ] && have_keys
 
 QUERY=""
@@ -120,7 +127,7 @@ channel = d.get("channel")
 if isinstance(channel, str) and re.fullmatch(r"[a-z]{1,20}", channel) and sys.argv[4] == "phone":
   open(sys.argv[3], "w").write(channel + "\n")
 if d.get("fitted") is False or (sys.argv[4] != "phone" and d.get("product") != sys.argv[4]):
-  # Not fitted here, or an update server from before there were two apps
+  # Not fitted here, or an update server from before there were these apps
   print("notfitted")
 elif d.get("paused"):
   print("paused")
@@ -133,7 +140,7 @@ else:
   print("offer " + d["download"])
 ' "$WORK/update.json" "$WORK" "$LUXEIA_DIR/channel" "$PRODUCT")" || fail "The update server's answer wasn't readable"
 case "$offer" in
-  notfitted) echo "No touch displays at this home"; exit 0 ;;
+  notfitted) echo "$FITTED_NONE"; exit 0 ;;
   paused) echo "Updates are paused; keeping this build"; done_ok ;;
   none) echo "Nothing approved for this home yet"; done_ok ;;
 esac
@@ -158,7 +165,8 @@ ok = (a.get("build") == b.get("build") and a.get("sha256") == b.get("sha256")
     and re.fullmatch(r"build-[A-Za-z0-9._-]+", name)
     # Both say they are this app (the phone app says nothing, from before there were two)
     and (a.get("product") or "phone") == product and (b.get("product") or "phone") == product
-    and name.startswith("build-display-") == (product == "display"))
+    and name.startswith("build-display-") == (product == "display")
+    and name.startswith("build-tablet-") == (product == "tablet"))
 print("%d %s %s" % (a["seq"], a["sha256"], a["build"]) if ok else "mismatch")
 ' "$WORK/approval.json" "$WORK/build-manifest.json" "$PRODUCT")" || fail "Refused: the approval isn't readable"
 [ "$facts" != mismatch ] || fail "Refused: the approval and the build don't match, or aren't for this app"

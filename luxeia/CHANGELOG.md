@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.0
+
+- Ready for wall tablets: for a home with wall tablets set up on Luxeia's
+  admin page, it also fetches the wall tablet dashboard (signed with its
+  own key, approved separately) and shows it at
+  /local/luxeia-tablet/index.html, which a tablet opens on its own and
+  signs in to once. Homes without wall tablets are unchanged.
+
 ## 1.6.2
 
 - Fixed: the health report said it "couldn't read everything (no access

@@ -9,14 +9,16 @@
   It asks Home Assistant, as the person already signed in to the HA app (or
   browser) around it, for a session for the add-on (ingress), and opens the
   add-on's own page in its place (or, from the touch displays' opener,
-  display-opener.html, its display/ page: LUXEIA_OPEN_PATH). People who can't change settings can only
+  display-opener.html, its display/ page, and from the wall tablets',
+  tablet-opener.html, its tablet/ page: LUXEIA_OPEN_PATH). People who can't change settings can only
   ask about an add-on whose id they know, so it tries this add-on's own id
   first (run.sh writes it into ADDON), then every other id Luxeia Home can
   have.
 
   Each step has a time limit and says what it's doing ("Finding Luxeia
   Home…"), and a failure says which step and why in small print, and in
-  Home Assistant's log (logger luxeia.opener / luxeia.display): on a Shelly
+  Home Assistant's log (logger luxeia.opener / luxeia.display /
+  luxeia.tablet): on a Shelly
   Wall Display, Home Assistant's own dashboard was too slow for a big home,
   its connection dropped, and the opener used to wait on it for minutes.
 
@@ -26,6 +28,8 @@
   way the app does (Home Assistant's own sign-in, once; the tokens kept in
   luxeia_auth_tokens, the app's own format, so the display app reads them
   too), opens its own connection, and goes on into display/ as before.
+  A wall tablet does the same at /local/luxeia-tablet/index.html, as the
+  page its own (often kiosk) browser starts on, going on into tablet/.
   Phones never do this: their opener has no LUXEIA_OPEN_PATH.
 */
 (function () {
@@ -41,7 +45,11 @@
   ];
   var names = [ADDON].concat(OTHERS.filter(function (n) { return n !== ADDON; }));
   var PATH = window.LUXEIA_OPEN_PATH || '';
-  var DISPLAY = PATH === 'display/';
+  // The devices that can open this page on their own (their own opener sets PATH)
+  var DEVICE = {
+    'display/': { word: 'display', folder: 'luxeia-display', logger: 'luxeia.display' },
+    'tablet/': { word: 'tablet', folder: 'luxeia-tablet', logger: 'luxeia.tablet' },
+  }[PATH] || null;
   var STEP_MS = window.LUXEIA_STEP_MS || 15000; // how long one step may take before it's given up (shorter in tests)
   var TOKENS = 'luxeia_auth_tokens';
   var STATE = 'luxeia_opener_state';
@@ -94,7 +102,7 @@
     return { call: function (m) { return limit(h.callWS(m)); }, close: function () {} };
   }
 
-  // ---- Its own connection, for a display that opens this page on its own
+  // ---- Its own connection, for a display or tablet that opens this page on its own
   function socket(accessToken) {
     return new Promise(function (resolve, reject) {
       var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/api/websocket');
@@ -257,12 +265,12 @@
   // What went wrong, in small print and in Home Assistant's log (best effort, a few times at most)
   function report(c, err) {
     var detail = 'Details: ' + browser() + ' · step: ' + step + ' · ' + why(err);
-    var tip = DISPLAY && around() ? ' · Tip: set this display to open ' + location.origin + '/local/luxeia-display/index.html on its own' : '';
+    var tip = DEVICE && around() ? ' · Tip: set this ' + DEVICE.word + ' to open ' + location.origin + '/local/' + DEVICE.folder + '/index.html on its own' : '';
     say('Can’t reach Luxeia Home just now. Trying again…', detail + tip);
     if (c && logged < 3) {
       logged += 1;
       c.call({ type: 'call_service', domain: 'system_log', service: 'write',
-        service_data: { message: 'Luxeia Home opener: ' + detail, level: 'warning', logger: DISPLAY ? 'luxeia.display' : 'luxeia.opener' } })
+        service_data: { message: 'Luxeia Home opener: ' + detail, level: 'warning', logger: DEVICE ? DEVICE.logger : 'luxeia.opener' } })
         .catch(function () { /* the log is a nice-to-have */ });
     }
   }
@@ -278,7 +286,7 @@
       if (err && err.code === 'auth_invalid' && !around()) {
         forget();
         if (c) c.close();
-        signInButton('Sign in to open Luxeia Home on this display.');
+        signInButton('Sign in to open Luxeia Home on this ' + (DEVICE ? DEVICE.word : 'device') + '.');
         return;
       }
       failures += 1;
@@ -292,8 +300,8 @@
     tries += 1;
     var h = around();
     if (h) return attempt(function () { return Promise.resolve(borrowed(h)); });
-    // A touch display showing this page on its own: sign in and connect itself
-    if (DISPLAY && window.parent === window) return attempt(ownConnection);
+    // A touch display or wall tablet showing this page on its own: sign in and connect itself
+    if (DEVICE && window.parent === window) return attempt(ownConnection);
     // Home Assistant may still be starting up around us
     if (tries < 40) return setTimeout(open, 250);
     say('Open Luxeia Home from the Home Assistant app.', '');

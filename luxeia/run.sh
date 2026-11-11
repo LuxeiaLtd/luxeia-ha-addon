@@ -18,6 +18,9 @@
 #     LUXEIA_PRODUCT=display, its own keys in display-keys/), serves it at
 #     display/ under ingress, and puts its opener at
 #     /config/www/luxeia-display/index.html for the displays' dashboard;
+#   - for homes with wall tablets fitted, the same for the wall tablet app
+#     (LUXEIA_PRODUCT=tablet, tablet-keys/), at tablet/ under ingress, with
+#     its opener at /config/www/luxeia-tablet/index.html;
 #   - every 5 minutes it tells the update server it's running, and whether
 #     Home Assistant itself answers (the heartbeat), so Luxeia hears within
 #     minutes when a home goes offline, and every 30 minutes how it is
@@ -62,6 +65,10 @@ PUBLIC="$HA_CONFIG/www/luxeia-dashboard"
 DISPLAY_STATE="$STATE/display"
 DISPLAY_LIVE="$WWW/luxeia-display"
 DISPLAY_PUBLIC="$HA_CONFIG/www/luxeia-display"
+# The wall tablet app (homes with wall tablets), the same way
+TABLET_STATE="$STATE/tablet"
+TABLET_LIVE="$WWW/luxeia-tablet"
+TABLET_PUBLIC="$HA_CONFIG/www/luxeia-tablet"
 
 log() { echo "[luxeia] $*"; }
 
@@ -112,12 +119,12 @@ KEY_FROM=""     # key | code | none, for the app's set-up check
 KEY_PROBLEM=""  # why a set-up code didn't work
 
 # The updater reads its key from update.conf, never its command line (the
-# touch display app's run has a copy in its own folder)
+# touch display and wall tablet apps' runs have a copy in their own folders)
 write_conf() {
-  mkdir -p "$DISPLAY_STATE"
-  chmod 700 "$DISPLAY_STATE"
+  mkdir -p "$DISPLAY_STATE" "$TABLET_STATE"
+  chmod 700 "$DISPLAY_STATE" "$TABLET_STATE"
   local f
-  for f in "$STATE/update.conf" "$DISPLAY_STATE/update.conf"; do
+  for f in "$STATE/update.conf" "$DISPLAY_STATE/update.conf" "$TABLET_STATE/update.conf"; do
     (umask 077; {
       echo "HOME_KEY=${HOME_KEY}"
       [ -n "$SERVER" ] && echo "SERVER=${SERVER}"
@@ -226,7 +233,7 @@ font:17px/1.5 Montserrat,Roboto,system-ui,sans-serif;text-align:center;padding:2
 # restart
 start_server() {
   # shellcheck disable=SC2086
-  $SERVER_CMD "$APP/serve.py" "$PORT" "$ALLOW_IP" "$LIVE" "$WAITING" "$ASKED" "$DISPLAY_LIVE" &
+  $SERVER_CMD "$APP/serve.py" "$PORT" "$ALLOW_IP" "$LIVE" "$WAITING" "$ASKED" "$DISPLAY_LIVE" "$TABLET_LIVE" &
 }
 
 # --- Keeping only the guest page public -----------------------------------------
@@ -270,45 +277,59 @@ sync_guest_page() {
   log "Only the guest page and the opener are public now (www/luxeia-dashboard)."
 }
 
-# --- The touch display app (homes with Shelly Wall Displays) -----------------------
+# --- The touch display and wall tablet apps ----------------------------------------
 
-# Its opener, at /local/luxeia-display/index.html: the displays' Home Assistant
-# dashboard shows it, and it goes on into display/ under this add-on's ingress
-# (opener.js, with this add-on's id, as the phone app's opener does)
-display_opener() {
-  local new="$HA_CONFIG/www/.luxeia-display.new" old="$HA_CONFIG/www/.luxeia-display.old"
+# Which of them (display or tablet): its name in the log, its folders, its
+# opener and keys, and what the updater says when the home hasn't got any
+extra() {
+  case "$1" in
+    display) X_NAME="Touch displays"; X_WHOSE="touch displays'"; X_STATE="$DISPLAY_STATE"; X_LIVE="$DISPLAY_LIVE"
+      X_PUBLIC="$DISPLAY_PUBLIC"; X_FOLDER=luxeia-display; X_NONE="No touch displays at this home" ;;
+    tablet) X_NAME="Wall tablets"; X_WHOSE="wall tablets'"; X_STATE="$TABLET_STATE"; X_LIVE="$TABLET_LIVE"
+      X_PUBLIC="$TABLET_PUBLIC"; X_FOLDER=luxeia-tablet; X_NONE="No wall tablets at this home" ;;
+  esac
+}
+
+# Its opener, at /local/luxeia-display/index.html (or luxeia-tablet): the
+# device's Home Assistant dashboard, or its own browser, shows it, and it
+# goes on into display/ (or tablet/) under this add-on's ingress (opener.js,
+# with this add-on's id, as the phone app's opener does)
+extra_opener() { # display | tablet
+  extra "$1"
+  local new="$HA_CONFIG/www/.$X_FOLDER.new" old="$HA_CONFIG/www/.$X_FOLDER.old"
   rm -rf "$new" "$old"
   mkdir -p "$new"
-  cp "$APP/display-opener.html" "$new/index.html" \
+  cp "$APP/$1-opener.html" "$new/index.html" \
     && sed "s/var ADDON = 'local_luxeia';/var ADDON = '${SLUG}';/" "$APP/opener.js" > "$new/opener.js" \
     && grep -q "var ADDON = '${SLUG}';" "$new/opener.js" \
-    || { log "Couldn't copy the touch displays' opener"; rm -rf "$new"; return 1; }
-  if [ -d "$DISPLAY_PUBLIC" ] && diff -r "$new" "$DISPLAY_PUBLIC" >/dev/null 2>&1; then
+    || { log "Couldn't copy the ${X_WHOSE} opener"; rm -rf "$new"; return 1; }
+  if [ -d "$X_PUBLIC" ] && diff -r "$new" "$X_PUBLIC" >/dev/null 2>&1; then
     rm -rf "$new"
     return 0
   fi
-  [ -d "$DISPLAY_PUBLIC" ] && mv "$DISPLAY_PUBLIC" "$old"
-  mv "$new" "$DISPLAY_PUBLIC" && rm -rf "$old"
-  log "The touch displays' dashboard address is /local/luxeia-display/index.html"
+  [ -d "$X_PUBLIC" ] && mv "$X_PUBLIC" "$old"
+  mv "$new" "$X_PUBLIC" && rm -rf "$old"
+  log "The ${X_WHOSE} dashboard address is /local/$X_FOLDER/index.html"
 }
 
-check_display() {
+check_extra() { # display | tablet
   local out code
-  out="$(LUXEIA_PRODUCT=display LUXEIA_DIR="$DISPLAY_STATE" WWW_DIR="$DISPLAY_LIVE" VERSION_FILE="$DISPLAY_STATE/version" \
-    LUXEIA_ADDON_VERSION="$ADDON_VERSION" KEYS_DIR="$APP/display-keys" APPROVAL_KEYS_DIR="$APP/approval-keys" \
+  extra "$1"
+  out="$(LUXEIA_PRODUCT="$1" LUXEIA_DIR="$X_STATE" WWW_DIR="$X_LIVE" VERSION_FILE="$X_STATE/version" \
+    LUXEIA_ADDON_VERSION="$ADDON_VERSION" KEYS_DIR="$APP/$1-keys" APPROVAL_KEYS_DIR="$APP/approval-keys" \
     bash "$APP/check-update.sh" 2>&1)"
   code=$?
   case "$out" in
-    *"No touch displays at this home"*)
+    *"$X_NONE"*)
       # Taken off on the admin page: nothing of it is served or left public
-      if [ -d "$DISPLAY_LIVE" ] || [ -d "$DISPLAY_PUBLIC" ]; then
-        rm -rf "$DISPLAY_LIVE" "$DISPLAY_PUBLIC" "$DISPLAY_STATE/previous" "$DISPLAY_STATE/version"
-        log "Touch displays: none at this home now, so their dashboard has been removed"
+      if [ -d "$X_LIVE" ] || [ -d "$X_PUBLIC" ]; then
+        rm -rf "$X_LIVE" "$X_PUBLIC" "$X_STATE/previous" "$X_STATE/version"
+        log "$X_NAME: none at this home now, so their dashboard has been removed"
       fi
       return 0 ;;
   esac
-  [ -n "$out" ] && log "Touch displays: $out"
-  [ -f "$DISPLAY_LIVE/index.html" ] && display_opener
+  [ -n "$out" ] && log "$X_NAME: $out"
+  [ -f "$X_LIVE/index.html" ] && extra_opener "$1"
   return "$code"
 }
 
@@ -350,8 +371,9 @@ check() {
         *) status false latest "" ;;
       esac
     fi
-    # The touch display app, whatever happened to the phone app's
-    check_display
+    # The touch display and wall tablet apps, whatever happened to the phone app's
+    check_extra display
+    check_extra tablet
     [ "$code" = 0 ] || exit 1
   ) 9>"$STATE/lock"
 }

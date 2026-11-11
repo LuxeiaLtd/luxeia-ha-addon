@@ -22,9 +22,10 @@ allows) took 10 to 30 seconds.
 signed in can ask; a check only ever installs a build Luxeia approved.
 
 The touch display app (homes with Shelly Wall Displays) is served the same
-way at display/, from its own folder; until it's there, display/ says so.
+way at display/, and the wall tablet app at tablet/, each from its own
+folder; until it's there, its address says so.
 
-Usage: python3 serve.py <port> <allowed address> <build folder> <waiting folder> <asked file> [display build folder]
+Usage: python3 serve.py <port> <allowed address> <build folder> <waiting folder> <asked file> [display build folder] [tablet build folder]
 The build folders are looked up on every request, so a build swapped in by
 the updater is served at once. The waiting folder is used until a build
 arrives. Standard library only.
@@ -103,16 +104,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         url = urllib.parse.urlsplit(self.path)
         rel = urllib.parse.unquote(url.path).lstrip('/')
         root = LIVE if os.path.isfile(os.path.join(LIVE, 'index.html')) else WAITING
-        if rel == 'display':
-            # Relative addresses inside it need the slash (it's under ingress's own path)
-            return self.answer(301, b'', [('Location', 'display/'), ('Cache-Control', 'no-cache')])
-        if rel.startswith('display/'):
-            rel = rel[len('display/'):]
-            if not DISPLAY or not os.path.isfile(os.path.join(DISPLAY, 'index.html')):
-                if rel in ('', 'index.html'):
-                    return self.answer(200, NO_DISPLAY, [('Content-Type', TYPES['.html']), ('Cache-Control', 'no-cache')])
-                return self.answer(404, b'Not found', [('Content-Type', 'text/plain')])
-            root = DISPLAY
+        for name, (folder, missing) in EXTRAS.items():
+            if rel == name:
+                # Relative addresses inside it need the slash (it's under ingress's own path)
+                return self.answer(301, b'', [('Location', name + '/'), ('Cache-Control', 'no-cache')])
+            if rel.startswith(name + '/'):
+                rel = rel[len(name) + 1:]
+                if not folder or not os.path.isfile(os.path.join(folder, 'index.html')):
+                    if rel in ('', 'index.html'):
+                        return self.answer(200, missing, [('Content-Type', TYPES['.html']), ('Cache-Control', 'no-cache')])
+                    return self.answer(404, b'Not found', [('Content-Type', 'text/plain')])
+                root = folder
+                break
         if rel == '' or rel.endswith('/'):
             rel += 'index.html'
         real_root = os.path.realpath(root)
@@ -153,17 +156,25 @@ def build_id(root):
         return None
 
 
-DISPLAY = ''  # the touch display app's build folder (the sixth argument)
-_build = {}  # build.json's path: (its time, the build id), one each for the phone and display apps
+_build = {}  # build.json's path: (its time, the build id), one each for the phone, display and tablet apps
 
-NO_DISPLAY = (b'<!doctype html><html lang="en-GB"><head><meta charset="utf-8">'
-              b'<meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="60">'
-              b'<title>Luxeia Home</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#161616;'
-              b'color:#F2EFE9;font:17px/1.5 Montserrat,Roboto,system-ui,sans-serif;text-align:center;padding:24px;box-sizing:border-box}'
-              b'@media (prefers-color-scheme: light){body{background:#F5F1EA;color:#222222}}</style></head>'
-              b'<body><main><p>The touch display dashboard isn\xe2\x80\x99t on this home yet. It arrives once touch displays are set up for it.</p></main></body></html>')
+
+def not_here(what):
+    """The page an app's address shows until its build is on this home."""
+    return (b'<!doctype html><html lang="en-GB"><head><meta charset="utf-8">'
+            b'<meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="60">'
+            b'<title>Luxeia Home</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#161616;'
+            b'color:#F2EFE9;font:17px/1.5 Montserrat,Roboto,system-ui,sans-serif;text-align:center;padding:24px;box-sizing:border-box}'
+            b'@media (prefers-color-scheme: light){body{background:#F5F1EA;color:#222222}}</style></head>'
+            b'<body><main><p>The ' + what.encode() + b' dashboard isn\xe2\x80\x99t on this home yet. It arrives once '
+            + what.encode() + b's are set up for it.</p></main></body></html>')
+
+
+# The other apps, at their own addresses: (their build folder, the page until it's there)
+EXTRAS = {'display': ('', not_here('touch display')), 'tablet': ('', not_here('wall tablet'))}
 
 if __name__ == '__main__':
     PORT, ALLOWED, LIVE, WAITING, ASKED = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
-    DISPLAY = sys.argv[6] if len(sys.argv) > 6 else ''
+    EXTRAS['display'] = (sys.argv[6] if len(sys.argv) > 6 else '', EXTRAS['display'][1])
+    EXTRAS['tablet'] = (sys.argv[7] if len(sys.argv) > 7 else '', EXTRAS['tablet'][1])
     Server(('', PORT), Handler).serve_forever()
